@@ -43,6 +43,9 @@ export function useRealtimeAudio(options: UseRealtimeAudioOptions = {}) {
   const silenceThreshold = 0.025;
   const silenceFrames = useRef(0);
   const SILENCE_FRAMES_THRESHOLD = 5;
+  
+  const speechFrames = useRef(0);
+  const SPEECH_FRAMES_THRESHOLD = 3;
 
   const chunkCountRef = useRef(0);
 
@@ -71,6 +74,7 @@ export function useRealtimeAudio(options: UseRealtimeAudioOptions = {}) {
     audioBufferRef.current = [];
     bufferSizeRef.current = 0;
     silenceFrames.current = 0;
+    speechFrames.current = 0;
     isSpeakingRef.current = false;
     isListeningRef.current = false;
     chunkCountRef.current = 0;
@@ -124,12 +128,15 @@ export function useRealtimeAudio(options: UseRealtimeAudioOptions = {}) {
         
         if (isSpeakingNow) {
           silenceFrames.current = 0;
-          if (!isSpeakingRef.current) {
+          speechFrames.current++;
+          
+          if (!isSpeakingRef.current && speechFrames.current >= SPEECH_FRAMES_THRESHOLD) {
             isSpeakingRef.current = true;
             setIsSpeaking(true);
             onSpeechStartRef.current?.();
           }
         } else {
+          speechFrames.current = 0;
           silenceFrames.current++;
           if (isSpeakingRef.current && silenceFrames.current > SILENCE_FRAMES_THRESHOLD) {
             isSpeakingRef.current = false;

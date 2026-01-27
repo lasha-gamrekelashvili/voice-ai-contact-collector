@@ -2,6 +2,12 @@
 
 A real-time voice-powered contact collection app using OpenAI's Realtime API. Users can speak to an AI assistant that naturally collects their name, email, and phone number.
 
+## Live Demo
+
+**[Try it here](https://voice-ai-contact-collector-client.onrender.com/)**
+
+> **Note:** The backend is hosted on Render's free tier, which spins down after 15 minutes of inactivity. If the app seems unresponsive, please wait 30-60 seconds for the server to wake up.
+
 ## Tech Stack
 
 **Frontend:**
