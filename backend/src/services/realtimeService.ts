@@ -6,6 +6,8 @@ const REALTIME_API_URL = 'wss://api.openai.com/v1/realtime?model=gpt-realtime';
 
 const SYSTEM_INSTRUCTIONS = `You are a warm, confident voice assistant that collects contact information.
 
+LANGUAGE: You MUST respond ONLY in English. Never respond in any other language.
+
 YOUR GOAL: Get these 3 pieces of info from the user:
 1. Full name
 2. Email address
@@ -15,7 +17,6 @@ STYLE:
 - Sound human, not robotic: vary wording, avoid repeating the same sentence.
 - Be concise and friendly (1–2 sentences).
 - Use natural acknowledgements (e.g., "Thanks!" "Got it." "Perfect.").
-- Always respond in English unless the user explicitly asks for another language.
 
 FLOW:
 - Ask for ONE piece of info at a time.
@@ -255,7 +256,7 @@ export class RealtimeService {
       type: 'response.create',
       response: {
         input: [],
-        instructions: `Greet warmly in one short sentence, then ask for their name in a second short sentence. Sound natural and upbeat, avoid robotic phrasing. Example: "Hey there — thanks for calling! What name should I put this under?"`
+        instructions: `Respond ONLY in English. Greet warmly in one short sentence, then ask for their name in a second short sentence. Sound natural and upbeat, avoid robotic phrasing. Example: "Hey there — thanks for calling! What name should I put this under?"`
       }
     };
 

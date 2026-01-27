@@ -40,7 +40,7 @@ export function useRealtimeAudio(options: UseRealtimeAudioOptions = {}) {
   const bufferSizeRef = useRef(0);
   const TARGET_BUFFER_SIZE = 2400; 
 
-  const silenceThreshold = 0.01;
+  const silenceThreshold = 0.025;
   const silenceFrames = useRef(0);
   const SILENCE_FRAMES_THRESHOLD = 5;
 
