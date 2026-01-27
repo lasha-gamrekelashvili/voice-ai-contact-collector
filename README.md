@@ -26,7 +26,7 @@ A real-time voice-powered contact collection app using OpenAI's Realtime API. Us
 ### 1. Clone the repository
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/lasha-gamrekelashvili/voice-ai-contact-collector.git
 cd voice-ai-contact-collector
 ```
 
