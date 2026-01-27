@@ -1,0 +1,44 @@
+.ai-caption {
+  width: 100%;
+  margin-bottom: 24px;
+  padding: 16px 20px;
+  background: rgba(0, 188, 212, 0.1);
+  border: 1px solid rgba(0, 188, 212, 0.2);
+  border-radius: 16px;
+  backdrop-filter: blur(10px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.ai-caption.fading {
+  opacity: 0.5;
+  transform: scale(0.98);
+}
+
+.ai-caption-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.ai-caption-text {
+  font-size: 15px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.9);
+  text-align: center;
+  width: 100%;
+}
+
+@keyframes captionFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ai-caption:not(.fading) {
+  animation: captionFadeIn 0.3s ease;
+}

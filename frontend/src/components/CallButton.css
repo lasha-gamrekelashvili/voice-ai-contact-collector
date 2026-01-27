@@ -1,0 +1,208 @@
+.call-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+.call-button {
+  position: relative;
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  border: none;
+  background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+  color: white;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background 0.5s ease, box-shadow 0.5s ease, transform 0.2s ease;
+  box-shadow: 0 8px 32px rgba(76, 175, 80, 0.3);
+  overflow: visible;
+}
+
+.call-button:hover {
+  transform: scale(1.05);
+  box-shadow: 0 12px 40px rgba(76, 175, 80, 0.4);
+}
+
+.call-button.active {
+  background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%);
+  box-shadow: 0 8px 32px rgba(244, 67, 54, 0.3);
+}
+
+.call-button.active:hover {
+  box-shadow: 0 12px 40px rgba(244, 67, 54, 0.4);
+}
+
+.call-button.connecting {
+  background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
+  animation: pulse 1.5s infinite;
+}
+
+.call-button.connected {
+  background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
+  box-shadow: 0 8px 32px rgba(33, 150, 243, 0.3);
+}
+
+.call-button.listening {
+  background: linear-gradient(135deg, #4CAF50 0%, #388E3C 100%);
+  box-shadow: 0 8px 32px rgba(76, 175, 80, 0.4);
+}
+
+.call-button.user-speaking {
+  background: linear-gradient(135deg, #9C27B0 0%, #7B1FA2 100%);
+  box-shadow: 0 8px 32px rgba(156, 39, 176, 0.5);
+}
+
+.call-button.speaking {
+  background: linear-gradient(135deg, #00BCD4 0%, #0097A7 100%);
+  box-shadow: 0 8px 32px rgba(0, 188, 212, 0.5);
+}
+
+.button-icon {
+  width: 36px;
+  height: 36px;
+  z-index: 1;
+}
+
+.button-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.button-text {
+  font-size: 13px;
+  text-align: center;
+  z-index: 1;
+}
+
+/* Pulse rings animation */
+.pulse-rings {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  opacity: 0;
+}
+
+.call-button.connected .ring {
+  animation: ring-pulse 2.5s infinite;
+  border-color: rgba(33, 150, 243, 0.4);
+}
+
+.call-button.listening .ring {
+  animation: ring-pulse 2s infinite;
+  border-color: rgba(76, 175, 80, 0.5);
+}
+
+.call-button.user-speaking .ring {
+  animation: ring-pulse 0.8s infinite;
+  border-color: rgba(156, 39, 176, 0.6);
+}
+
+.call-button.speaking .ring {
+  animation: ring-pulse 1s infinite;
+  border-color: rgba(0, 188, 212, 0.6);
+}
+
+.ring-1 {
+  width: 160px;
+  height: 160px;
+  animation-delay: 0s !important;
+}
+
+.ring-2 {
+  width: 180px;
+  height: 180px;
+  animation-delay: 0.3s !important;
+}
+
+.ring-3 {
+  width: 200px;
+  height: 200px;
+  animation-delay: 0.6s !important;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.02);
+    opacity: 0.9;
+  }
+}
+
+@keyframes ring-pulse {
+  0% {
+    transform: translate(-50%, -50%) scale(0.8);
+    opacity: 0.8;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1.2);
+    opacity: 0;
+  }
+}
+
+@keyframes glow {
+  from {
+    box-shadow: 0 8px 32px rgba(0, 188, 212, 0.4);
+  }
+  to {
+    box-shadow: 0 12px 48px rgba(0, 188, 212, 0.6);
+  }
+}
+
+.call-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.loading-spinner {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+}
+
+.loading-spinner svg {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.error-message {
+  margin-top: 12px;
+  padding: 8px 16px;
+  background-color: #ffebee;
+  color: #c62828;
+  border-radius: 4px;
+  font-size: 14px;
+  text-align: center;
+  max-width: 300px;
+}
