@@ -40,8 +40,10 @@ export function useWebSocket() {
   const scheduledSourcesRef = useRef<AudioBufferSourceNode[]>([]);
   const audioChunkPlayCountRef = useRef(0);
   const gainNodeRef = useRef<GainNode | null>(null);
+  const stopSpeakingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const GAP_RESET_THRESHOLD_SEC = 0.05;
   const FADE_SAMPLES = 128;
+  const STOP_SPEAKING_DELAY_MS = 150;
   
 
   const initAudioContext = useCallback(async () => {
@@ -58,6 +60,10 @@ export function useWebSocket() {
   }, []);
 
   const stopAudio = useCallback(() => {
+    if (stopSpeakingTimerRef.current) {
+      clearTimeout(stopSpeakingTimerRef.current);
+      stopSpeakingTimerRef.current = null;
+    }
     scheduledSourcesRef.current.forEach(source => {
       try {
         source.onended = null;
@@ -123,6 +129,11 @@ export function useWebSocket() {
       
       scheduledSourcesRef.current.push(source);
       
+      if (stopSpeakingTimerRef.current) {
+        clearTimeout(stopSpeakingTimerRef.current);
+        stopSpeakingTimerRef.current = null;
+      }
+      
       if (!isPlayingRef.current) {
         isPlayingRef.current = true;
         setIsAISpeaking(true);
@@ -135,9 +146,13 @@ export function useWebSocket() {
         }
         
         if (scheduledSourcesRef.current.length === 0) {
-          isPlayingRef.current = false;
-          setIsAISpeaking(false);
-          setStatus('connected');
+          stopSpeakingTimerRef.current = setTimeout(() => {
+            if (scheduledSourcesRef.current.length === 0) {
+              isPlayingRef.current = false;
+              setIsAISpeaking(false);
+              setStatus('connected');
+            }
+          }, STOP_SPEAKING_DELAY_MS);
         }
       };
 
@@ -221,8 +236,9 @@ export function useWebSocket() {
     const ws = new WebSocket(WS_URL);
     wsRef.current = ws;
 
-    ws.onopen = () => {
+    ws.onopen = async () => {
       console.log('WebSocket connected');
+      await initAudioContext();
       setStatus('connected');
     };
 
@@ -242,7 +258,7 @@ export function useWebSocket() {
       setStatus('error');
       setIsAISpeaking(false);
     };
-  }, [handleMessage]);
+  }, [handleMessage, initAudioContext, stopAudio]);
 
   const disconnect = useCallback(() => {
     stopAudio();

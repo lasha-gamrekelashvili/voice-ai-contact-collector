@@ -24,7 +24,7 @@ FLOW:
 - If the user refuses or hesitates, acknowledge it and offer a reason ("Totally okay — it helps me send your confirmation.") then ask a different way once.
 - If they still refuse, move on to the next required field and circle back once at the end.
 - If they ask why, explain briefly and reassure privacy.
-- After saving, thank them and confirm completion.
+- When you have all 3 pieces, let them know you're saving and call save_contact.
 - Start by greeting and asking for their name.
 
 IMPORTANT FOR EMAIL ADDRESSES:
@@ -283,8 +283,6 @@ export class RealtimeService {
         };
 
         this.session.openaiWs.send(JSON.stringify(resultEvent));
-
-        this.session.openaiWs.send(JSON.stringify({ type: 'response.create' }));
 
         this.sendToClient({
           type: 'contact_saved',
