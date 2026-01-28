@@ -43,6 +43,20 @@ app.get('/health', async (req, res) => {
   });
 });
 
+app.get('/api/contacts', async (req, res) => {
+  try {
+    const Contact = mongoose.models.Contact || mongoose.model('Contact');
+    const contacts = await Contact.find().sort({ createdAt: -1 }).limit(50);
+    res.json({
+      count: contacts.length,
+      database: process.env.MONGODB_URI || 'mongodb://localhost:27017/voice-ai-contacts',
+      contacts: contacts
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 const server = createServer(app);
 
 const wss = new WebSocketServer({ 
