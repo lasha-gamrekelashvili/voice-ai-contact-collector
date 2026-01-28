@@ -7,27 +7,20 @@ import {
 
 interface UseRealtimeAudioOptions {
   onAudioChunk?: (base64Audio: string) => void;
-  onSpeechStart?: () => void;
   enabled?: boolean;
 }
 
 
 export function useRealtimeAudio(options: UseRealtimeAudioOptions = {}) {
-  const { onAudioChunk, onSpeechStart, enabled = false } = options;
+  const { onAudioChunk, enabled = false } = options;
 
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   
   const onAudioChunkRef = useRef(onAudioChunk);
-  const onSpeechStartRef = useRef(onSpeechStart);
-  
   useEffect(() => {
     onAudioChunkRef.current = onAudioChunk;
   }, [onAudioChunk]);
-  
-  useEffect(() => {
-    onSpeechStartRef.current = onSpeechStart;
-  }, [onSpeechStart]);
 
   const streamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -42,10 +35,12 @@ export function useRealtimeAudio(options: UseRealtimeAudioOptions = {}) {
 
   const silenceThreshold = 0.025;
   const silenceFrames = useRef(0);
-  const SILENCE_FRAMES_THRESHOLD = 5;
+  const SILENCE_FRAMES_THRESHOLD = 8;
   
   const speechFrames = useRef(0);
-  const SPEECH_FRAMES_THRESHOLD = 3;
+  const SPEECH_FRAMES_THRESHOLD = 2;
+  const lastSpeechAtRef = useRef(0);
+  const SPEAKING_HOLD_MS = 350;
 
   const chunkCountRef = useRef(0);
 
@@ -128,23 +123,27 @@ export function useRealtimeAudio(options: UseRealtimeAudioOptions = {}) {
         const rms = Math.sqrt(sum / resampled.length);
         
         const isSpeakingNow = rms > silenceThreshold;
+        const now = performance.now();
         
         // Track speech start/stop with hysteresis to avoid flickering
         if (isSpeakingNow) {
           silenceFrames.current = 0;
           speechFrames.current++;
+          lastSpeechAtRef.current = now;
           
           if (!isSpeakingRef.current && speechFrames.current >= SPEECH_FRAMES_THRESHOLD) {
             isSpeakingRef.current = true;
             setIsSpeaking(true);
-            onSpeechStartRef.current?.();
           }
         } else {
           speechFrames.current = 0;
           silenceFrames.current++;
-          if (isSpeakingRef.current && silenceFrames.current > SILENCE_FRAMES_THRESHOLD) {
-            isSpeakingRef.current = false;
-            setIsSpeaking(false);
+          if (isSpeakingRef.current) {
+            const holdElapsed = now - lastSpeechAtRef.current;
+            if (holdElapsed >= SPEAKING_HOLD_MS && silenceFrames.current > SILENCE_FRAMES_THRESHOLD) {
+              isSpeakingRef.current = false;
+              setIsSpeaking(false);
+            }
           }
         }
 

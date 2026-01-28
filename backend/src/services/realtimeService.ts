@@ -36,12 +36,21 @@ HOW TO SOUND NATURAL:
 THE FLOW:
 - Start with an interesting, varied greeting (not the same "Hey there" every time)
 - Get their name first, but make it smooth
+- ALWAYS collect a full name (first + last). If they give only one name, ask for the last name.
 - Once you have the name, USE IT naturally in conversation — makes it personal
 - Move to email, then phone — keep it flowing naturally
 - Weave in reasons for needing email/phone that feel helpful, not demanding
-- If they give partial info, gently prompt: "And the rest?" or "Hit me with the whole thing"
+- If they give partial email info, gently prompt: "And the rest?" or "Hit me with the whole thing"
+- For phone numbers: Accept WHATEVER they give you — don't ask for more digits or "the full number"
 - If they hesitate: be cool about it, give a quick reason why you need it
-- When you have all 3 pieces: thank them genuinely, let them know you're saving it, then call save_contact
+- When you have all 3 pieces: FIRST verbally acknowledge and say you're saving it (e.g., "Perfect, let me save that for you" or "Got it all, saving now" or "Alright, I'll get this saved"), THEN call save_contact
+- NEVER call save_contact silently — always tell them you're saving it first
+
+AFTER SAVING:
+- If the user says "wait" or "actually" and wants to correct any info (name, email, or phone), be cool about it
+- FIRST verbally acknowledge you're fixing it (e.g., "No problem, updating that" or "Got it, let me fix that"), THEN call update_contact with ONLY the field(s) they want to change
+- NEVER call update_contact silently — always acknowledge the correction first
+- Examples: User says "oh wait, my email is actually john@yahoo.com" → say "Got it, updating" then call update_contact with just the new email
 
 STAY ON TRACK:
 - Don't ask random questions like "where are you from?" or other tangents
@@ -50,8 +59,13 @@ STAY ON TRACK:
 - You're not here to chat about their life story — just make the info collection feel smooth and pleasant
 
 IMPORTANT TECHNICAL NOTES:
+- Full name is required. If the user provides only a first name, ask for a last name before moving on.
 - Users may say emails without "@" (e.g., "john gmail.com") — you'll handle this automatically
-- Phone numbers might be spoken as words — that's fine, you'll convert them
+- Phone numbers: Accept ANY reasonable phone number the user gives you (7, 8, 9, 10+ digits — doesn't matter)
+  - If they say "599 555 555" that's perfectly fine, take it
+  - Don't ask for more digits or a "full" number — whatever they give you is good
+  - International formats, local formats, any format — just accept it
+  - Phone numbers might be spoken as words — that's fine, you'll convert them
 - When you call save_contact, make sure you have all three: name, email, phone
 
 WHAT TO AVOID:
@@ -59,12 +73,14 @@ WHAT TO AVOID:
 - Don't say "Can I have your X" every single time
 - Don't be robotic or repetitive
 - Don't ask questions that don't help you get their contact info
+- Don't be picky about phone number format or length — accept whatever they give you
+- Don't ask for "the full number" or "all 10 digits" — just take what they say
 - Don't forget you're talking to a HUMAN — match their energy`;
 
 const SAVE_CONTACT_TOOL = {
   type: 'function',
   name: 'save_contact',
-  description: 'Save contact info to database. Call when you have name, email, AND phone.',
+  description: 'Save contact info to database. Call AFTER you verbally acknowledge that you are saving it (e.g., "Let me save that" or "Got it, saving now"). Never call this silently. Requires name, email, AND phone.',
   parameters: {
     type: 'object',
     properties: {
@@ -76,17 +92,33 @@ const SAVE_CONTACT_TOOL = {
   }
 };
 
+const UPDATE_CONTACT_TOOL = {
+  type: 'function',
+  name: 'update_contact',
+  description: 'Update the most recently saved contact with corrected information. Call AFTER you verbally acknowledge the correction (e.g., "Got it, updating" or "No problem, let me fix that"). Never call this silently. Use when user wants to fix their name, email, or phone.',
+  parameters: {
+    type: 'object',
+    properties: {
+      name: { type: 'string', description: 'Updated full name (optional)' },
+      email: { type: 'string', description: 'Updated email address with @ symbol (optional)' },
+      phone: { type: 'string', description: 'Updated phone number as digits only (optional)' }
+    }
+  }
+};
+
 interface RealtimeSession {
   openaiWs: WebSocket | null;
   isConnected: boolean;
   hasGreeted: boolean;
+  lastSavedContactId: string | null;
 }
 
 export class RealtimeService {
   private session: RealtimeSession = {
     openaiWs: null,
     isConnected: false,
-    hasGreeted: false
+    hasGreeted: false,
+    lastSavedContactId: null
   };
 
   private clientWs: WebSocket;
@@ -170,7 +202,7 @@ export class RealtimeService {
             voice: 'marin'
           }
         },
-        tools: [SAVE_CONTACT_TOOL],
+        tools: [SAVE_CONTACT_TOOL, UPDATE_CONTACT_TOOL],
         tool_choice: 'auto'
       }
     };
@@ -332,10 +364,48 @@ Pick a style and make it your own — sound natural, not scripted!`
 
         if (this.onContactSaved) {
           this.onContactSaved(savedContact);
-        } 
+        }
 
       } catch (error: any) {
         logger.error('Error handling function call', { error: error.message });
+        
+        const errorEvent = {
+          type: 'conversation.item.create',
+          item: {
+            type: 'function_call_output',
+            call_id: item.call_id,
+            output: JSON.stringify({ success: false, error: error.message })
+          }
+        };
+
+        this.session.openaiWs.send(JSON.stringify(errorEvent));
+        this.session.openaiWs.send(JSON.stringify({ type: 'response.create' }));
+      }
+    } else if (item.name === 'update_contact') {
+      try {
+        const args = JSON.parse(item.arguments);
+        const updatedContact = await this.updateContact(args);
+
+        const resultEvent = {
+          type: 'conversation.item.create',
+          item: {
+            type: 'function_call_output',
+            call_id: item.call_id,
+            output: JSON.stringify({ success: true })
+          }
+        };
+
+        this.session.openaiWs.send(JSON.stringify(resultEvent));
+
+        this.sendToClient({
+          type: 'contact_updated',
+          data: updatedContact
+        });
+
+        logger.info('Contact updated via Realtime API', { contact: updatedContact });
+
+      } catch (error: any) {
+        logger.error('Error updating contact', { error: error.message });
         
         const errorEvent = {
           type: 'conversation.item.create',
@@ -403,7 +473,11 @@ Pick a style and make it your own — sound natural, not scripted!`
 
     await contact.save();
     
+    // Store the ID so we can update it later if needed
+    this.session.lastSavedContactId = contact._id.toString();
+    
     logger.info('Contact saved to database', {
+      id: contact._id,
       name: data.name,
       email: normalizedEmail,
       phone: cleanedPhone
@@ -413,6 +487,45 @@ Pick a style and make it your own — sound natural, not scripted!`
       name: data.name.trim(),
       email: normalizedEmail,
       phone: cleanedPhone
+    };
+  }
+
+  private async updateContact(data: { name?: string; email?: string; phone?: string }): Promise<{ name: string; email: string; phone: string }> {
+    if (!this.session.lastSavedContactId) {
+      throw new Error('No contact to update');
+    }
+
+    const updateData: any = {};
+    
+    if (data.name) {
+      updateData.name = data.name.trim();
+    }
+    if (data.email) {
+      updateData.email = this.normalizeEmail(data.email);
+    }
+    if (data.phone) {
+      updateData.phone = this.convertWordsToDigits(data.phone);
+    }
+
+    const contact = await Contact.findByIdAndUpdate(
+      this.session.lastSavedContactId,
+      updateData,
+      { new: true, runValidators: true }
+    );
+
+    if (!contact) {
+      throw new Error('Contact not found');
+    }
+    
+    logger.info('Contact updated in database', {
+      id: contact._id,
+      updated: updateData
+    });
+
+    return {
+      name: contact.name,
+      email: contact.email,
+      phone: contact.phone
     };
   }
 
@@ -482,5 +595,6 @@ Pick a style and make it your own — sound natural, not scripted!`
     }
     this.session.isConnected = false;
     this.session.hasGreeted = false;
+    this.session.lastSavedContactId = null;
   }
 }

@@ -1,4 +1,5 @@
 import { Contact } from '../types';
+import { useEffect, useState, useRef } from 'react';
 import './ContactSaved.css';
 
 interface ContactSavedProps {
@@ -6,15 +7,43 @@ interface ContactSavedProps {
 }
 
 export function ContactSaved({ contact }: ContactSavedProps) {
+  const [isUpdated, setIsUpdated] = useState(false);
+  const prevContactRef = useRef<Contact | null>(null);
+
+  useEffect(() => {
+    // If this is the first time seeing this contact, just store it
+    if (!prevContactRef.current) {
+      prevContactRef.current = contact;
+      return;
+    }
+
+    // Check if the contact actually changed
+    const hasChanged = 
+      prevContactRef.current.name !== contact.name ||
+      prevContactRef.current.email !== contact.email ||
+      prevContactRef.current.phone !== contact.phone;
+
+    if (hasChanged) {
+      // Show "updated" animation
+      setIsUpdated(true);
+      const timer = setTimeout(() => setIsUpdated(false), 2000);
+      
+      // Update the stored contact
+      prevContactRef.current = contact;
+      
+      return () => clearTimeout(timer);
+    }
+  }, [contact]);
+
   return (
-    <div className="contact-saved">
+    <div className={`contact-saved ${isUpdated ? 'contact-updated' : ''}`}>
       <div className="contact-saved-header">
         <div className="contact-saved-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="20 6 9 17 4 12"></polyline>
           </svg>
         </div>
-        <h3>Contact Saved</h3>
+        <h3>{isUpdated ? 'Contact Updated' : 'Contact Saved'}</h3>
       </div>
       
       <div className="contact-details">

@@ -17,7 +17,6 @@ function App() {
     connect, 
     disconnect, 
     sendAudioChunk,
-    cancelResponse,
     stopAudio
   } = useWebSocket();
 
@@ -26,7 +25,6 @@ function App() {
   const isAISpeakingRef = useRef(isAISpeaking);
   const isCallActiveRef = useRef(isCallActive);
   const sendAudioChunkRef = useRef(sendAudioChunk);
-  const cancelResponseRef = useRef(cancelResponse);
   const stopAudioRef = useRef(stopAudio);
 
   useEffect(() => {
@@ -42,24 +40,12 @@ function App() {
   }, [sendAudioChunk]);
 
   useEffect(() => {
-    cancelResponseRef.current = cancelResponse;
-  }, [cancelResponse]);
-
-  useEffect(() => {
     stopAudioRef.current = stopAudio;
   }, [stopAudio]);
 
   const handleAudioChunk = useCallback((base64Audio: string) => {
     if (isCallActiveRef.current) {
       sendAudioChunkRef.current(base64Audio);
-    }
-  }, []);
-
-  const handleSpeechStart = useCallback(() => {
-    if (isAISpeakingRef.current) {
-      console.log('User interrupted AI - canceling response');
-      cancelResponseRef.current();
-      stopAudioRef.current();
     }
   }, []);
 
@@ -70,7 +56,6 @@ function App() {
     stopListening
   } = useRealtimeAudio({
     onAudioChunk: handleAudioChunk,
-    onSpeechStart: handleSpeechStart,
     enabled: false
   });
 

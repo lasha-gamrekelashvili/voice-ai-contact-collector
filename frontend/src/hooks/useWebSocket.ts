@@ -221,6 +221,13 @@ export function useWebSocket() {
             setSavedContact(message.data as Contact);
           }
           break;
+
+        case 'contact_updated':
+          // Contact was updated with corrected information
+          if (message.data && typeof message.data === 'object') {
+            setSavedContact(message.data as Contact);
+          }
+          break;
           
         case 'error':
           if (typeof message.data === 'string') {
