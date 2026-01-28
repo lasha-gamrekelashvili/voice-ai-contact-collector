@@ -25,6 +25,7 @@ export function handleWebSocketConnection(ws: WebSocket): void {
   let realtimeService: RealtimeService | null = null;
   let connectionTimeout: NodeJS.Timeout | null = null;
 
+  // Timeout if OpenAI connection takes too long
   connectionTimeout = setTimeout(() => {
     logger.warn('WebSocket connection timeout', { timeout: WS_CONNECTION_TIMEOUT_MS });
     if (ws.readyState === WebSocket.OPEN) {
@@ -34,6 +35,7 @@ export function handleWebSocketConnection(ws: WebSocket): void {
 
   logger.info('WebSocket client connected');
 
+  // Initialize connection to OpenAI Realtime API
   (async () => {
     try {
       realtimeService = new RealtimeService(ws, (contact) => {
@@ -53,16 +55,19 @@ export function handleWebSocketConnection(ws: WebSocket): void {
     }
   })();
 
+  // Handle messages from frontend
   ws.on('message', (message: Buffer) => {
     try {
       const data: WebSocketMessage = JSON.parse(message.toString());
 
       switch (data.type) {
         case 'ping':
+          // Keepalive heartbeat
           safeSend(ws, { type: 'pong' });
           break;
 
         case 'audio_chunk':
+          // Forward user audio to OpenAI
           if (data.data && realtimeService) {
             realtimeService.appendAudio(data.data);
           } else {
@@ -74,6 +79,7 @@ export function handleWebSocketConnection(ws: WebSocket): void {
           break;
 
         case 'cancel':
+          // User interrupted AI - cancel current response
           if (realtimeService) {
             realtimeService.cancelResponse();
           }

@@ -110,14 +110,17 @@ export function useRealtimeAudio(options: UseRealtimeAudioOptions = {}) {
 
       processorRef.current = audioContextRef.current.createScriptProcessor(4096, 1, 1);
 
+      // Process audio in real-time from microphone
       processorRef.current.onaudioprocess = (event) => {
         if (!isListeningRef.current) return;
         
         const inputData = event.inputBuffer.getChannelData(0);
         
+        // Resample from device rate to OpenAI's 24kHz
         const sampleRate = audioContextRef.current?.sampleRate || 44100;
         const resampled = resampleAudio(new Float32Array(inputData), sampleRate, REALTIME_SAMPLE_RATE);
         
+        // Calculate volume (RMS) to detect speech
         let sum = 0;
         for (let i = 0; i < resampled.length; i++) {
           sum += resampled[i] * resampled[i];
@@ -126,6 +129,7 @@ export function useRealtimeAudio(options: UseRealtimeAudioOptions = {}) {
         
         const isSpeakingNow = rms > silenceThreshold;
         
+        // Track speech start/stop with hysteresis to avoid flickering
         if (isSpeakingNow) {
           silenceFrames.current = 0;
           speechFrames.current++;
@@ -144,10 +148,12 @@ export function useRealtimeAudio(options: UseRealtimeAudioOptions = {}) {
           }
         }
 
+        // Buffer audio until we have enough to send (2400 samples = 100ms at 24kHz)
         audioBufferRef.current.push(resampled);
         bufferSizeRef.current += resampled.length;
 
         if (bufferSizeRef.current >= TARGET_BUFFER_SIZE) {
+          // Combine buffered chunks
           const totalLength = audioBufferRef.current.reduce((s, arr) => s + arr.length, 0);
           const combined = new Float32Array(totalLength);
           let offset = 0;
@@ -156,6 +162,7 @@ export function useRealtimeAudio(options: UseRealtimeAudioOptions = {}) {
             offset += buffer.length;
           }
 
+          // Encode to base64 and send to backend
           const base64 = encodeAudioToBase64(combined);
           chunkCountRef.current++;
           

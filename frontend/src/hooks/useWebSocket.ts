@@ -78,6 +78,7 @@ export function useWebSocket() {
     setIsAISpeaking(false);
   }, []);
 
+  // Play AI audio chunk through speakers
   const playAudioChunk = useCallback(async (base64Audio: string) => {
     try {
       const audioContext = await initAudioContext();
@@ -85,11 +86,13 @@ export function useWebSocket() {
       
       if (decodedData.length === 0) return;
 
+      // Resample if device sample rate doesn't match OpenAI's 24kHz
       const targetRate = audioContext.sampleRate;
       const float32Data = targetRate === REALTIME_SAMPLE_RATE
         ? decodedData
         : resampleAudio(decodedData, REALTIME_SAMPLE_RATE, targetRate);
 
+      // Reset timing if there was a gap (new response started)
       const currentTime = audioContext.currentTime;
       if (currentTime > nextPlayTimeRef.current + GAP_RESET_THRESHOLD_SEC) {
         nextPlayTimeRef.current = currentTime;
@@ -98,6 +101,7 @@ export function useWebSocket() {
 
       audioChunkPlayCountRef.current++;
 
+      // Fade in first chunk to avoid click/pop
       const isFirstChunk = audioChunkPlayCountRef.current === 1;
       if (isFirstChunk) {
         const fadeSamples = Math.min(FADE_SAMPLES, float32Data.length);
@@ -106,6 +110,7 @@ export function useWebSocket() {
         }
       }
 
+      // Create audio buffer and schedule playback
       const audioBuffer = audioContext.createBuffer(
         1,
         float32Data.length,
@@ -122,6 +127,7 @@ export function useWebSocket() {
         source.connect(audioContext.destination);
       }
 
+      // Schedule this chunk right after previous chunk ends
       const startTime = Math.max(currentTime, nextPlayTimeRef.current);
       
       source.start(startTime);
@@ -129,6 +135,7 @@ export function useWebSocket() {
       
       scheduledSourcesRef.current.push(source);
       
+      // Clear any pending "stop speaking" timer
       if (stopSpeakingTimerRef.current) {
         clearTimeout(stopSpeakingTimerRef.current);
         stopSpeakingTimerRef.current = null;
@@ -139,12 +146,14 @@ export function useWebSocket() {
         setIsAISpeaking(true);
       }
 
+      // When chunk finishes, check if AI is done speaking
       source.onended = () => {
         const index = scheduledSourcesRef.current.indexOf(source);
         if (index > -1) {
           scheduledSourcesRef.current.splice(index, 1);
         }
         
+        // Wait 150ms after last chunk to mark as "done speaking"
         if (scheduledSourcesRef.current.length === 0) {
           stopSpeakingTimerRef.current = setTimeout(() => {
             if (scheduledSourcesRef.current.length === 0) {
@@ -161,25 +170,30 @@ export function useWebSocket() {
     }
   }, [initAudioContext]);
 
+  // Handle all messages from backend
   const handleMessage = useCallback(async (event: MessageEvent) => {
     try {
       const message: WebSocketMessage = JSON.parse(event.data);
       
       switch (message.type) {
         case 'ready':
+          // Backend connected to OpenAI
           setStatus('connected');
           break;
           
         case 'listening':
+          // User is speaking - stop any AI audio
           stopAudio();
           setStatus('listening');
           break;
           
         case 'processing':
+          // User stopped speaking, AI is thinking
           setStatus('processing');
           break;
 
         case 'audio_delta':
+          // AI audio chunk - play it
           if (typeof message.data === 'string') {
             setStatus('speaking');
             await playAudioChunk(message.data);
@@ -187,18 +201,22 @@ export function useWebSocket() {
           break;
           
         case 'text':
+          // AI text transcript for display
           if (typeof message.data === 'string') {
             setLatestAIText(message.data as string);
           }
           break;
           
         case 'transcription':
+          // User speech transcription (unused currently)
           break;
 
         case 'response_done':
+          // AI finished generating response
           break;
           
         case 'contact_saved':
+          // Contact successfully saved to database
           if (message.data && typeof message.data === 'object') {
             setSavedContact(message.data as Contact);
           }
@@ -213,6 +231,7 @@ export function useWebSocket() {
           break;
           
         case 'pong':
+          // Keepalive response
           break;
           
         default:

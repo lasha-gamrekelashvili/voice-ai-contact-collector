@@ -154,6 +154,7 @@ export class RealtimeService {
     this.session.openaiWs.send(JSON.stringify(sessionConfig));
   }
 
+  // Handle all events from OpenAI Realtime API
   private handleOpenAIMessage(data: Buffer): void {
     try {
       const event = JSON.parse(data.toString());
@@ -164,6 +165,7 @@ export class RealtimeService {
           break;
 
         case 'response.created':
+          // AI starts generating response
           logger.debug('Response started');
           this.isResponseActive = true;
           this.lastResponseItemId = null;
@@ -177,16 +179,19 @@ export class RealtimeService {
           break;
 
         case 'input_audio_buffer.speech_started':
+          // OpenAI detected user started speaking
           logger.debug('User speech started');
           this.sendToClient({ type: 'listening' });
           break;
 
         case 'input_audio_buffer.speech_stopped':
+          // OpenAI detected user stopped speaking
           logger.debug('User speech stopped');
           this.sendToClient({ type: 'processing' });
           break;
 
         case 'response.output_audio.delta':
+          // AI audio chunk - forward to frontend for playback
           if (event.delta) {
             if (event.item_id && !this.lastResponseItemId) {
               this.lastResponseItemId = event.item_id;
@@ -203,6 +208,7 @@ export class RealtimeService {
           break;
 
         case 'response.output_audio_transcript.done':
+          // AI text transcript for display
           if (event.transcript) {
             this.sendToClient({
               type: 'text',
@@ -212,6 +218,7 @@ export class RealtimeService {
           break;
 
         case 'conversation.item.input_audio_transcription.completed':
+          // User speech transcription
           if (event.transcript) {
             this.sendToClient({
               type: 'transcription',
@@ -227,6 +234,7 @@ export class RealtimeService {
           break;
 
         case 'response.output_item.done':
+          // Check if AI wants to call save_contact tool
           if (event.item?.type === 'function_call') {
             this.handleFunctionCall(event.item);
           }
@@ -377,6 +385,7 @@ export class RealtimeService {
 
   private audioChunkCount = 0;
 
+  // Forward user audio from frontend to OpenAI
   appendAudio(base64Audio: string): void {
     if (!this.session.openaiWs || !this.session.isConnected) {
       logger.debug('Cannot append audio - not connected');
@@ -402,6 +411,7 @@ export class RealtimeService {
   private isResponseActive = false;
   private lastResponseItemId: string | null = null;
 
+  // User interrupted AI - cancel current response and truncate audio
   cancelResponse(): void {
     if (!this.session.openaiWs || !this.session.isConnected) return;
     
