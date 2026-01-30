@@ -24,8 +24,9 @@ export function useRealtimeAudio(options: UseRealtimeAudioOptions = {}) {
 
   const streamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
-  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const workletNodeRef = useRef<AudioWorkletNode | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const silentGainRef = useRef<GainNode | null>(null);
   const isSpeakingRef = useRef(false);
   const isListeningRef = useRef(false);
   
@@ -45,10 +46,15 @@ export function useRealtimeAudio(options: UseRealtimeAudioOptions = {}) {
   const chunkCountRef = useRef(0);
 
   const cleanupResources = useCallback(() => {
-    if (processorRef.current) {
-      processorRef.current.onaudioprocess = null;
-      processorRef.current.disconnect();
-      processorRef.current = null;
+    if (workletNodeRef.current) {
+      workletNodeRef.current.port.onmessage = null;
+      workletNodeRef.current.disconnect();
+      workletNodeRef.current = null;
+    }
+
+    if (silentGainRef.current) {
+      silentGainRef.current.disconnect();
+      silentGainRef.current = null;
     }
 
     if (sourceRef.current) {
@@ -98,39 +104,44 @@ export function useRealtimeAudio(options: UseRealtimeAudioOptions = {}) {
       console.log('Microphone access granted');
       streamRef.current = stream;
 
-      audioContextRef.current = new AudioContext();
-      console.log('AudioContext created, sample rate:', audioContextRef.current.sampleRate);
-      
-      sourceRef.current = audioContextRef.current.createMediaStreamSource(stream);
+      const context = new AudioContext();
+      audioContextRef.current = context;
+      console.log('AudioContext created, sample rate:', context.sampleRate);
 
-      processorRef.current = audioContextRef.current.createScriptProcessor(4096, 1, 1);
+      const workletUrl = new URL('/audio-processor.worklet.js', window.location.origin).href;
+      await context.audioWorklet.addModule(workletUrl);
 
-      // Process audio in real-time from microphone
-      processorRef.current.onaudioprocess = (event) => {
-        if (!isListeningRef.current) return;
-        
-        const inputData = event.inputBuffer.getChannelData(0);
-        
+      sourceRef.current = context.createMediaStreamSource(stream);
+      workletNodeRef.current = new AudioWorkletNode(context, 'audio-processor');
+      silentGainRef.current = context.createGain();
+      silentGainRef.current.gain.value = 0;
+
+      const sampleRate = context.sampleRate;
+
+      workletNodeRef.current.port.onmessage = (event: MessageEvent<{ type: string; data: Float32Array }>) => {
+        if (!isListeningRef.current || event.data.type !== 'audio') return;
+
+        const inputData = event.data.data;
+
         // Resample from device rate to OpenAI's 24kHz
-        const sampleRate = audioContextRef.current?.sampleRate || 44100;
         const resampled = resampleAudio(new Float32Array(inputData), sampleRate, REALTIME_SAMPLE_RATE);
-        
+
         // Calculate volume (RMS) to detect speech
         let sum = 0;
         for (let i = 0; i < resampled.length; i++) {
           sum += resampled[i] * resampled[i];
         }
         const rms = Math.sqrt(sum / resampled.length);
-        
+
         const isSpeakingNow = rms > silenceThreshold;
         const now = performance.now();
-        
+
         // Track speech start/stop with hysteresis to avoid flickering
         if (isSpeakingNow) {
           silenceFrames.current = 0;
           speechFrames.current++;
           lastSpeechAtRef.current = now;
-          
+
           if (!isSpeakingRef.current && speechFrames.current >= SPEECH_FRAMES_THRESHOLD) {
             isSpeakingRef.current = true;
             setIsSpeaking(true);
@@ -152,7 +163,6 @@ export function useRealtimeAudio(options: UseRealtimeAudioOptions = {}) {
         bufferSizeRef.current += resampled.length;
 
         if (bufferSizeRef.current >= TARGET_BUFFER_SIZE) {
-          // Combine buffered chunks
           const totalLength = audioBufferRef.current.reduce((s, arr) => s + arr.length, 0);
           const combined = new Float32Array(totalLength);
           let offset = 0;
@@ -161,14 +171,13 @@ export function useRealtimeAudio(options: UseRealtimeAudioOptions = {}) {
             offset += buffer.length;
           }
 
-          // Encode to base64 and send to backend
           const base64 = encodeAudioToBase64(combined);
           chunkCountRef.current++;
-          
+
           if (chunkCountRef.current <= 3 || chunkCountRef.current % 50 === 0) {
             console.log(`Audio chunk #${chunkCountRef.current}, size: ${base64.length}, rms: ${rms.toFixed(4)}`);
           }
-          
+
           onAudioChunkRef.current?.(base64);
 
           audioBufferRef.current = [];
@@ -176,8 +185,9 @@ export function useRealtimeAudio(options: UseRealtimeAudioOptions = {}) {
         }
       };
 
-      sourceRef.current.connect(processorRef.current);
-      processorRef.current.connect(audioContextRef.current.destination);
+      sourceRef.current.connect(workletNodeRef.current);
+      workletNodeRef.current.connect(silentGainRef.current);
+      silentGainRef.current.connect(context.destination);
 
       isListeningRef.current = true;
       setIsListening(true);
