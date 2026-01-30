@@ -39,7 +39,7 @@ sequenceDiagram
     App->>useAudio: startListening()
     useAudio->>User: getUserMedia({ audio })
     User-->>useAudio: grant microphone
-    useAudio->>useAudio: AudioContext + ScriptProcessor (4096)
+    useAudio->>useAudio: AudioContext + addModule(worklet) + AudioWorkletNode (2400)
     useAudio-->>App: setIsListening(true)
 ```
 
@@ -58,10 +58,10 @@ sequenceDiagram
     participant Realtime as RealtimeService
     participant OpenAI as OpenAI Realtime API
 
-    loop Every ~100ms (2400 samples @ 24kHz)
+    loop Every ~50ms (1200 samples @ 24kHz, low latency)
         User->>useAudio: Microphone input
-        useAudio->>useAudio: onaudioprocess: resample to 24kHz, buffer
-        useAudio->>useAudio: buffer >= 2400 → encodeBase64
+        useAudio->>useAudio: Worklet port.onmessage(2400) → resample to 24kHz, buffer
+        useAudio->>useAudio: buffer >= 1200 → encodeBase64
         useAudio->>App: onAudioChunk(base64)
         App->>useWS: sendAudioChunk(base64)
         useWS->>Backend: { type: 'audio_chunk', data: base64 }
@@ -210,7 +210,7 @@ sequenceDiagram
     User->>App: Click "End Call"
     App->>App: hasStartedRef = false, clear timer
     App->>useAudio: stopListening()
-    useAudio->>useAudio: cleanupResources (mic, AudioContext, processor)
+    useAudio->>useAudio: cleanupResources (mic, AudioContext, worklet)
     App->>useWS: stopAudio()
     App->>useWS: disconnect()
     useWS->>Backend: ws.close()
@@ -227,7 +227,8 @@ sequenceDiagram
 |-------|------------|------|
 | **Frontend** | `App`, `CallButton`, `AICaption`, `ContactSaved` | UI and orchestration |
 | **Frontend** | `useWebSocket` | WS to backend, send audio chunks, receive events, play AI audio |
-| **Frontend** | `useRealtimeAudio` | Mic capture, resample to 24kHz, buffer ~100ms, emit base64 chunks |
+| **Frontend** | `useRealtimeAudio` | Mic capture via AudioWorklet (2400→24kHz, buffer ~50ms), emit base64 chunks (low latency) |
+| **Frontend** | `public/audio-processor.worklet.js` | AudioWorklet processor: buffers 2400 samples (~50ms at device rate), posts to main thread |
 | **Backend** | Express + `createServer`, `WebSocketServer` on `/ws` | HTTP + WS server |
 | **Backend** | `handleWebSocketConnection` | Per-client handler, creates RealtimeService, routes messages |
 | **Backend** | `RealtimeService` | Bridge: client WS ↔ OpenAI Realtime API, tools → DB |

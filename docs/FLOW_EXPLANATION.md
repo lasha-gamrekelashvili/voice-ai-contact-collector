@@ -6,7 +6,7 @@ This document walks through the flow in plain language and answers common questi
 
 ## High-level flow (one paragraph)
 
-The user clicks **Start Call** in the browser. The frontend opens a WebSocket to the backend. The backend opens a second WebSocket to **OpenAI’s Realtime API** and configures a voice session (instructions, tools, 24 kHz audio). Once the session is ready, the backend sends a **ready** message to the frontend. After a short delay (500 ms), the frontend starts capturing the microphone, resampling to 24 kHz, buffering ~100 ms chunks, encoding to base64, and sending them over the WebSocket as **audio_chunk** messages. The backend forwards these to OpenAI via **input_audio_buffer.append**. OpenAI transcribes with Whisper, runs the conversation with GPT, and streams back audio and text. When the AI has name, email, and phone, it calls the **save_contact** tool; the backend saves the contact in MongoDB and sends **contact_saved** to the frontend so the UI can show the saved contact. The user can end the call anytime; the frontend stops the mic and closes the WebSocket, and the backend closes the OpenAI connection.
+The user clicks **Start Call** in the browser. The frontend opens a WebSocket to the backend. The backend opens a second WebSocket to **OpenAI’s Realtime API** and configures a voice session (instructions, tools, 24 kHz audio). Once the session is ready, the backend sends a **ready** message to the frontend. After a short delay (500 ms), the frontend starts capturing the microphone, resampling to 24 kHz, buffering ~50 ms chunks (low latency), encoding to base64, and sending them over the WebSocket as **audio_chunk** messages. The backend forwards these to OpenAI via **input_audio_buffer.append**. OpenAI transcribes with Whisper, runs the conversation with GPT, and streams back audio and text. When the AI has name, email, and phone, it calls the **save_contact** tool; the backend saves the contact in MongoDB and sends **contact_saved** to the frontend so the UI can show the saved contact. The user can end the call anytime; the frontend stops the mic and closes the WebSocket, and the backend closes the OpenAI connection.
 
 ---
 
@@ -48,10 +48,8 @@ The user clicks **Start Call** in the browser. The frontend opens a WebSocket to
 - When status is **connected** and the frontend has received **ready**, after `CONNECTION_READY_DELAY` (500 ms) the app calls `startListening()` from `useRealtimeAudio`.
 - `useRealtimeAudio`:
   - Requests microphone via `navigator.mediaDevices.getUserMedia({ audio })`.
-  - Creates an `AudioContext` and a `ScriptProcessorNode` (4096 samples).
-  - Resamples from the device sample rate to **24 kHz** (OpenAI’s rate).
-  - Buffers samples until it has **2400 samples** (~100 ms at 24 kHz).
-  - Encodes the buffer to base64 and calls `onAudioChunk(base64)`.
+  - Creates an `AudioContext`, loads the **AudioWorklet** from `public/audio-processor.worklet.js` via `addModule()`, and creates an `AudioWorkletNode` (worklet buffers 2400 samples at device rate, ~50 ms, and posts to the main thread).
+  - On each `port.onmessage`: resamples the 2400-sample chunk from the device sample rate to **24 kHz** (OpenAI’s rate), buffers until **1200 samples** (~50 ms at 24 kHz), encodes to base64, and calls `onAudioChunk(base64)`.
 - In `App`, `handleAudioChunk` only forwards chunks when the call is active; it calls `sendAudioChunk(base64)` from `useWebSocket`.
 - `useWebSocket` sends **{ type: 'audio_chunk', data: base64 }** over the WebSocket.
 
@@ -102,7 +100,7 @@ The user clicks **Start Call** in the browser. The frontend opens a WebSocket to
 ### 12. Ending the call
 
 - User clicks **End Call**. App calls `stopListening()`, `stopAudio()`, `disconnect()`.
-- **stopListening** releases the microphone and cleans up `AudioContext` and the script processor.
+- **stopListening** releases the microphone and cleans up `AudioContext` and the AudioWorklet node.
 - **disconnect** closes the client WebSocket.
 - Backend’s `ws.on('close')` runs: it clears the connection timeout and calls **realtimeService.disconnect()**, which closes the OpenAI WebSocket and resets session state (e.g. **lastSavedContactId**, **hasGreeted**).
 
@@ -114,7 +112,7 @@ The user clicks **Start Call** in the browser. The frontend opens a WebSocket to
 They trigger `connect()` in `useWebSocket`, which opens a WebSocket to the backend. The backend creates a `RealtimeService`, connects to the OpenAI Realtime API, configures the session (instructions + tools + 24 kHz audio), sends an initial greeting to the model, and sends **ready** to the frontend. After 500 ms, the frontend starts the microphone and begins sending base64 audio chunks over the WebSocket.
 
 **Q: How does user audio get from the browser to OpenAI?**  
-The frontend uses `useRealtimeAudio`: it captures mic input with `getUserMedia`, processes it in an `AudioContext` with a `ScriptProcessorNode`, resamples to 24 kHz, buffers ~100 ms (2400 samples), encodes to base64, and passes chunks to `useWebSocket`, which sends **audio_chunk** messages. The backend’s `RealtimeService` receives these and forwards them to OpenAI via **input_audio_buffer.append**.
+The frontend uses `useRealtimeAudio`: it captures mic input with `getUserMedia`, runs an **AudioWorklet** (in `public/audio-processor.worklet.js`) that buffers 2400 samples at device rate (~50 ms) and posts to the main thread; the main thread resamples to 24 kHz, buffers ~50 ms (1200 samples), encodes to base64, and passes chunks to `useWebSocket`, which sends **audio_chunk** messages. The backend’s `RealtimeService` receives these and forwards them to OpenAI via **input_audio_buffer.append**.
 
 **Q: Why 24 kHz?**  
 OpenAI’s Realtime API expects PCM audio at 24 kHz. The frontend resamples from the device rate to 24 kHz before sending; the backend passes the base64 through. AI output is also 24 kHz; the frontend resamples to the device rate for playback.
@@ -154,7 +152,8 @@ Backend sends **{ type: 'error', data: message }** (e.g. “Failed to connect to
 |------|--------|
 | Call button, start/end handlers | `frontend/src/App.tsx`, `frontend/src/components/CallButton.tsx` |
 | WebSocket connect, send audio, handle messages, play AI audio | `frontend/src/hooks/useWebSocket.ts` |
-| Microphone capture, resample, buffer, base64 | `frontend/src/hooks/useRealtimeAudio.ts` |
+| Microphone capture (AudioWorklet + resample, buffer, base64) | `frontend/src/hooks/useRealtimeAudio.ts` |
+| AudioWorklet processor (buffer 2400 samples, ~50 ms, post to main thread) | `frontend/public/audio-processor.worklet.js` |
 | Audio encode/decode, resample, constants | `frontend/src/utils/audioUtils.ts`, `frontend/src/utils/constants.ts` |
 | HTTP server, WebSocket server, routes | `backend/src/index.ts` |
 | Per-client WS handler, route audio_chunk/cancel | `backend/src/services/websocketService.ts` |

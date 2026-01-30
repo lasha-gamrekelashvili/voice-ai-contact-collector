@@ -32,7 +32,7 @@ export function useRealtimeAudio(options: UseRealtimeAudioOptions = {}) {
   
   const audioBufferRef = useRef<Float32Array[]>([]);
   const bufferSizeRef = useRef(0);
-  const TARGET_BUFFER_SIZE = 2400; 
+  const TARGET_BUFFER_SIZE = 1200; 
 
   const silenceThreshold = 0.025;
   const silenceFrames = useRef(0);
@@ -158,11 +158,11 @@ export function useRealtimeAudio(options: UseRealtimeAudioOptions = {}) {
           }
         }
 
-        // Buffer audio until we have enough to send (2400 samples = 100ms at 24kHz)
+        // Buffer audio until we have enough to send (1200 samples = 50ms at 24kHz, low latency)
         audioBufferRef.current.push(resampled);
         bufferSizeRef.current += resampled.length;
 
-        if (bufferSizeRef.current >= TARGET_BUFFER_SIZE) {
+        while (bufferSizeRef.current >= TARGET_BUFFER_SIZE) {
           const totalLength = audioBufferRef.current.reduce((s, arr) => s + arr.length, 0);
           const combined = new Float32Array(totalLength);
           let offset = 0;
@@ -171,7 +171,8 @@ export function useRealtimeAudio(options: UseRealtimeAudioOptions = {}) {
             offset += buffer.length;
           }
 
-          const base64 = encodeAudioToBase64(combined);
+          const toSend = combined.subarray(0, TARGET_BUFFER_SIZE);
+          const base64 = encodeAudioToBase64(toSend);
           chunkCountRef.current++;
 
           if (chunkCountRef.current <= 3 || chunkCountRef.current % 50 === 0) {
@@ -180,8 +181,14 @@ export function useRealtimeAudio(options: UseRealtimeAudioOptions = {}) {
 
           onAudioChunkRef.current?.(base64);
 
-          audioBufferRef.current = [];
-          bufferSizeRef.current = 0;
+          const remainder = totalLength - TARGET_BUFFER_SIZE;
+          if (remainder > 0) {
+            audioBufferRef.current = [combined.subarray(TARGET_BUFFER_SIZE)];
+            bufferSizeRef.current = remainder;
+          } else {
+            audioBufferRef.current = [];
+            bufferSizeRef.current = 0;
+          }
         }
       };
 
